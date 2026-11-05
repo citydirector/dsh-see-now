@@ -53,6 +53,11 @@ window.__ModuleLoader__.load({
       'state.nosave': '没有改动。',
       'sec.common': '常用',
       'sec.advanced': '高级（一般不用动）',
+      'field.prefer': '用哪个转写服务',
+      'field.prefer.hint': '自动 = 宿主自带的优先，没有再用 asr.json 那个。后两项说到做到：指定的找不到就直接没有字幕，不会偷偷换个顶上。',
+      'prefer.auto': '自动（宿主优先）',
+      'prefer.host': '只用宿主自带的',
+      'prefer.local': '只用 asr.json 那个服务',
       'field.pace': '默认节奏',
       'field.pace.hint': '决定多长时间醒一次、一次说多少。理解为"话多话少"。',
       'pace.calm': '平缓 —— 很久才出声',
@@ -163,6 +168,7 @@ window.__ModuleLoader__.load({
     /** 表单草稿：扁平结构，读起来比嵌套少一层心智负担。 */
     function draftOf(values) {
       return {
+        prefer: values.listen.prefer,
         maxAutonomousWakes: values.maxAutonomousWakes,
         idleStopMin: values.idleStopMin,
         defaultPace: values.defaultPace,
@@ -198,8 +204,13 @@ window.__ModuleLoader__.load({
           : num(draft[key]);
       }
       const listen = {};
-      for (const key of ['live', 'liveMin', 'liveStep', 'silence', 'maxSeg', 'pollMs']) {
-        if (draft[key] !== values.listen[key]) listen[key] = key === 'live' ? draft[key] === true : num(draft[key]);
+      for (const key of ['prefer', 'live', 'liveMin', 'liveStep', 'silence', 'maxSeg', 'pollMs']) {
+        if (draft[key] !== values.listen[key]) {
+          // prefer 是枚举字符串，walk 不进 num()（那会把 'host' 换成 NaN）
+          listen[key] = key === 'prefer'
+            ? draft[key]
+            : key === 'live' ? draft[key] === true : num(draft[key]);
+        }
       }
       if (Object.keys(listen).length > 0) patch.listen = listen;
       return patch;
@@ -317,6 +328,11 @@ window.__ModuleLoader__.load({
         h('div', { className: 'sn_card' },
           h('div', { className: 'sn_cardhd' }, h('span', { className: 'sn_cardname' }, t('sec.common'))),
           h('div', { className: 'sn_grid' },
+            select('prefer', 'field.prefer', 'field.prefer.hint', [
+              ['auto', t('prefer.auto')],
+              ['host', t('prefer.host')],
+              ['local', t('prefer.local')],
+            ]),
             select('defaultPace', 'field.pace', 'field.pace.hint', [
               ['calm', t('pace.calm')],
               ['normal', t('pace.normal')],

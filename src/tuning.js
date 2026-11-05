@@ -40,6 +40,15 @@ export const TUNING_DEFAULTS = Object.freeze({
  * 而长句要等 `maxSeg`（3 秒）强切才动 —— **等断句的时间是转写本身的 20 倍**。
  */
 export const LISTEN_DEFAULTS = Object.freeze({
+  /**
+   * 用哪个转写器（`auto` / `host` / `local`，见 listen.js 的 `resolveTranscriber`）。
+   *
+   * 默认 `auto` = 宿主优先、没有就回落本地 —— 社区用户那边不用装任何东西。
+   * 另外两个是**说到做到**：指定了就不偷偷换成另一个。之所以要这个开关：
+   * 两者转出来的东西不一样（宿主 SenseVoice 走 CPU、70ms 级；自建服务往往是 GPU、
+   * 带字级时间码），而原来写死宿主优先，等于自己搭了服务也用不上。
+   */
+  prefer: 'auto',
   /** 长句「边说边出字幕」：说满 `liveMin` 秒就先转一版，整句落盘后覆盖它。 */
   live: true,
   /** 说满这么多秒才发第一版快照。1.0 秒的片段质量明显掉（实测丢一半），1.5 可用，1.8 稳。 */
@@ -56,6 +65,14 @@ export const LISTEN_DEFAULTS = Object.freeze({
 
 /** 可用节奏。和 runner.js 的 PACES 同步，但不在模块层 import（避免环形依赖）。 */
 export const PACES_KEYS = Object.freeze(['calm', 'normal', 'dense', 'game-economic']);
+
+/**
+ * 转写服务的三种选择。
+ *
+ * `auto` 的顺序就是回落方向：宿主能用就用宿主，没有再找本地。
+ * `host` / `local` 是严格的（找不到就明说没有，不换一个顶上）。
+ */
+export const PREFER_KEYS = Object.freeze(['auto', 'host', 'local']);
 
 function dshHome(env) {
   return env.DSH_HOME || join(env.USERPROFILE || env.HOME || homedir(), '.dsh');
@@ -79,6 +96,10 @@ function readListen(raw) {
   const out = { ...LISTEN_DEFAULTS };
   const bad = [];
 
+  if (src.prefer !== undefined) {
+    if (PREFER_KEYS.includes(src.prefer)) out.prefer = src.prefer;
+    else bad.push(`listen.prefer 只能是 ${PREFER_KEYS.join(' / ')}，已用默认 auto`);
+  }
   if (src.live !== undefined) {
     if (typeof src.live === 'boolean') out.live = src.live;
     else bad.push('listen.live 只能是 true / false');
@@ -189,7 +210,7 @@ export const WRITABLE_KEYS = Object.freeze([
 
 /** `listen` 段能改的键。 */
 export const WRITABLE_LISTEN_KEYS = Object.freeze([
-  'live', 'liveMin', 'liveStep', 'silence', 'maxSeg', 'pollMs',
+  'prefer', 'live', 'liveMin', 'liveStep', 'silence', 'maxSeg', 'pollMs',
 ]);
 
 /**
