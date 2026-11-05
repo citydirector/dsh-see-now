@@ -205,6 +205,21 @@ window.__ModuleLoader__.load({
       return patch;
     }
 
+    /**
+     * 把保存响应合并回当前值。
+     *
+     * 老宿主只回这次提交的键（新宿主回完整快照），所以这里必须做一次浅合并；
+     * 直接把响应当 `values` 会让 `draftOf()` 读不到 `listen`，保存成功后页面
+     * 反而抛错。`listen` 和写回接口一样是段内浅合并，不能整段覆盖丢其它项。
+     */
+    function mergeValues(current, patch) {
+      return {
+        ...(current ?? {}),
+        ...(patch ?? {}),
+        listen: { ...(current?.listen ?? {}), ...(patch?.listen ?? {}) },
+      };
+    }
+
     // ── 设置页 ────────────────────────────────────────────────────────────────
     function SettingsPage() {
       const [data, setData] = useState(null);
@@ -217,6 +232,8 @@ window.__ModuleLoader__.load({
       const load = useCallback(async () => {
         setBusy(true);
         setError('');
+        setRejected([]);
+        setSavedAt(0);
         try {
           const next = await api('/status');
           setData(next);
@@ -235,6 +252,7 @@ window.__ModuleLoader__.load({
       const set = (key, value) => {
         setSavedAt(0);
         setRejected([]);
+        setError('');
         setDraft(current => ({ ...current, [key]: value }));
       };
 
@@ -257,8 +275,10 @@ window.__ModuleLoader__.load({
           if (result.ok) {
             // 用宿主回的值重建，而不是把草稿当成新真相：这样面板显示的永远是
             // "文件里实际是什么"，连派生值（idleStopMs）都对。
-            setData(current => ({ ...current, values: result.values, warnings: result.warnings, path: result.path }));
-            setDraft(draftOf(result.values));
+            // 合并而不是替换：兼容只回补丁键的老宿主，也保住未提交的字段。
+            const values = mergeValues(data.values, result.values);
+            setData(current => ({ ...current, values, warnings: result.warnings, path: result.path }));
+            setDraft(draftOf(values));
             setSavedAt(Date.now());
           } else {
             setRejected(result.rejected ?? []);
@@ -275,7 +295,9 @@ window.__ModuleLoader__.load({
           h('div', { className: 'sn_hero' },
             h('h2', { className: 'sn_title' }, t('title')),
             h('p', { className: 'sn_sub' }, t('sub'))),
-          error !== '' ? h('div', { className: 'sn_box bad' }, `${t('err.load')}：${error}`) : h('div', { className: 'sn_note' }, t('state.loading')),
+          error !== ''
+            ? h('div', { className: 'sn_box bad', role: 'alert' }, `${t('err.load')}：${error}`)
+            : h('div', { className: 'sn_note', role: 'status' }, t('state.loading')),
           h('div', { className: 'sn_row' }, h('button', { className: 'sn_btn', onClick: load, disabled: busy }, t('state.reload'))));
       }
 
@@ -299,14 +321,14 @@ window.__ModuleLoader__.load({
         }, options.map(([value, text]) => h('option', { key: String(value), value: String(value) }, text))),
         h('span', { className: 'sn_hint' }, t(hintKey)));
 
-      return h('div', { className: 'sn_root' },
+      return h('div', { className: 'sn_root', 'aria-busy': busy ? 'true' : undefined },
         h('div', { className: 'sn_hero' },
           h('h2', { className: 'sn_title' }, t('title')),
           h('p', { className: 'sn_sub' }, t('sub')),
           h('div', { className: 'sn_mono' }, `${t('hint.path')}：${data.path}`)),
 
         data.warnings.length > 0
-          ? h('div', { className: 'sn_box warn' },
+          ? h('div', { className: 'sn_box warn', role: 'status', 'aria-live': 'polite' },
             t('warn.title'),
             h('ul', {}, data.warnings.map((line, i) => h('li', { key: i }, line))))
           : null,
@@ -351,21 +373,21 @@ window.__ModuleLoader__.load({
 
         // ── 保存 ──
         rejected.length > 0
-          ? h('div', { className: 'sn_box bad' },
+          ? h('div', { className: 'sn_box bad', role: 'alert' },
             t('err.rejected'),
             h('ul', {}, rejected.map((line, i) => h('li', { key: i }, line))))
           : null,
 
         error !== ''
-          ? h('div', { className: 'sn_box bad' }, `${t('err.save')}：${error}`)
+          ? h('div', { className: 'sn_box bad', role: 'alert' }, `${t('err.save')}：${error}`)
           : null,
 
         h('div', { className: 'sn_row' },
           h('button', { className: 'sn_btn primary', onClick: save, disabled: busy },
             busy ? t('state.saving') : t('state.save')),
           h('button', { className: 'sn_btn', onClick: load, disabled: busy }, t('state.reload')),
-          savedAt > 0 ? h('span', { className: 'sn_ok' }, t('state.saved')) : null,
-          savedAt < 0 ? h('span', { className: 'sn_note' }, t('state.nosave')) : null),
+          savedAt > 0 ? h('span', { className: 'sn_ok', role: 'status', 'aria-live': 'polite' }, t('state.saved')) : null,
+          savedAt < 0 ? h('span', { className: 'sn_note', role: 'status' }, t('state.nosave')) : null),
 
         h('div', { className: 'sn_note' }, t('hint.origin')));
     }
@@ -392,7 +414,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply;
     exports.inject = inject;
     exports.name = 'dsh-see-now';
-    exports.__test = { draftOf, patchOf, num, TEXT };
+    exports.__test = { draftOf, patchOf, mergeValues, num, TEXT };
     return module.exports;
   },
 });

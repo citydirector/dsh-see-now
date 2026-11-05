@@ -153,6 +153,22 @@ test('patchOf 只带改过的键', () => {
   });
 });
 
+test('保存响应按段浅合并，未提交的字段不会被清空', () => {
+  const { __test } = mod;
+  const current = {
+    maxAutonomousWakes: 8,
+    idleStopMin: 3,
+    defaultPace: 'normal',
+    speechPacing: true,
+    listen: { live: true, liveMin: 1.8, liveStep: 1.2, silence: 0.35, maxSeg: 3, pollMs: 100 },
+  };
+  const merged = __test.mergeValues(current, { idleStopMin: 9, listen: { silence: 0.5 } });
+  assert.equal(merged.idleStopMin, 9);
+  assert.equal(merged.maxAutonomousWakes, 8);
+  assert.equal(merged.listen.silence, 0.5);
+  assert.equal(merged.listen.maxSeg, 3);
+});
+
 test('空输入框交给宿主去拒，不在前端偷偷兜底成默认值', () => {
   const { __test } = mod;
   assert.ok(Number.isNaN(__test.num('')));

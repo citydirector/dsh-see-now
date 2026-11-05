@@ -122,6 +122,18 @@ test('未知路由 → 404', async () => {
   assert.equal(res.status, 404);
 });
 
+test('保存成功回完整快照，而不是只回这次提交的键', async () => {
+  const { body } = await post({ patch: { idleStopMin: 11 } });
+  assert.equal(body.ok, true);
+  assert.equal(body.values.idleStopMin, 11);
+  assert.equal(body.values.idleStopMs, 660000);
+  // 未提交的字段也必须在：前端保存后会用整份 values 重建草稿。
+  assert.equal(body.values.maxAutonomousWakes, 8);
+  assert.equal(body.values.defaultPace, 'normal');
+  assert.equal(body.values.listen.live, true);
+  assert.equal(body.values.listen.maxSeg, 5);
+});
+
 test('非 loopback 的 Host 被信任栅栏挡在 403', async () => {
   const code = await new Promise((resolve) => {
     const req = http.request({

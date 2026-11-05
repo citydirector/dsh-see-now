@@ -146,11 +146,15 @@ export function createSettingsApi({ logger } = {}) {
         if (result.ok) log(`see-now: 配置已写回 ${result.path}`);
         else log(`see-now: 配置被拒 ${JSON.stringify(result.rejected)}`);
 
+        // 成功时回完整快照，而不是只回这次提交的键：前端要用它重建整份草稿。
+        // `writeTuning().values` 只是补丁的规范化结果，缺的键会让 `draftOf()`
+        // 读 `values.listen.live` 时直接抛错，面板保存后就白屏。
+        const current = result.ok ? readTuning() : null;
         send(res, 200, {
           ok: result.ok,
           path: result.path,
-          values: result.values,
-          warnings: result.warnings,
+          values: current === null ? result.values : valuesOf(current),
+          warnings: current === null ? result.warnings : current.warnings,
           rejected: result.rejected,
         });
         return;
